@@ -1,3 +1,6 @@
+# Ignore .idea
+.idea/
+
 # Ignore Visual Studio Code settings
 .vscode/
 
