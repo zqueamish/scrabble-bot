@@ -27,6 +27,7 @@ thumbs.db
 *.log
 *.vscode
 *.vssettings
+.idea/
 
 # Ignore dotnet artifacts
 *.dll
