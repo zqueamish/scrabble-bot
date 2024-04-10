@@ -3,9 +3,16 @@
 module internal Eval
 
     open StateMonad
+    open System
 
-    let add a b = failwith "Not implemented"      
-    let div a b = failwith "Not implemented"      
+    let add a b = 
+        a >>= (fun x ->
+            b >>= (fun y ->
+                ret (x + y)))      
+    let div a b =
+        a >>= (fun x ->
+            b >>= (fun y ->
+                ret (x / y)))      
 
     type aExp =
         | N of int
@@ -57,11 +64,77 @@ module internal Eval
     let (.>=.) a b = ~~(a .<. b)                (* numeric greater than or equal to *)
     let (.>.) a b = ~~(a .=. b) .&&. (a .>=. b) (* numeric greater than *)    
 
-    let arithEval a : SM<int> = failwith "Not implemented"      
+    let rec arithEval a : SM<int> =
+        match a with
+        | N n -> ret n
+        | V x -> lookup x
+        | WL -> wordLength
+        | PV p -> arithEval p >>= pointValue
+        | Add (a1, a2) ->
+            arithEval a1 >>= fun x ->
+            arithEval a2 >>= fun y ->
+            ret (x + y)
+        | Sub (a1, a2) ->
+            arithEval a1 >>= fun x ->
+            arithEval a2 >>= fun y ->
+            ret (x - y)
+        | Mul (a1, a2) ->
+            arithEval a1 >>= fun x ->
+            arithEval a2 >>= fun y ->
+            ret (x * y)
+        | Div (a1, a2) ->
+            arithEval a1 >>= fun x ->
+            arithEval a2 >>= fun y ->
+            ret (x / y)
+        | Mod (a1, a2) ->
+            arithEval a1 >>= fun x ->
+            arithEval a2 >>= fun y ->
+            if y = 0 then fail DivisionByZero else ret (x / y)
+        | CharToInt c ->
+            charEval c >>= fun cv ->
+            ret (int cv)
 
-    let charEval c : SM<char> = failwith "Not implemented"      
+    and charEval c : SM<char> =
+        match c with
+        | C c -> ret c
+        | CV cv -> arithEval cv >>= characterValue
+        | ToUpper c ->
+            charEval c >>= fun c ->
+            ret (Char.ToUpper c)
+        | ToLower c ->
+            charEval c >>= fun c ->
+            ret (Char.ToLower c)
+        |IntToChar a ->
+            arithEval a >>= fun iv ->
+            ret (char iv) 
 
-    let boolEval b : SM<bool> = failwith "Not implemented"
+    and boolEval b : SM<bool> =
+        let vowels = ['a';'A';'e';'E';'o';'O';'y';'Y']
+        let consonants = ['b';'B';'c';'C';'d';'D';'f';'F';'g';'G';'h';'H';'j';'J';'k';'K';'l';'L';'m';'M';'n';'N';'p';'P';'q';'Q';'r';'R';'s';'S';'t';'T';'v';'V';'w';'W';'y';'Y';'z';'Z']
+        match b with
+        | TT -> ret true
+        | FF -> ret false
+        | AEq (a1, a2) ->
+            arithEval a1 >>= fun x ->
+            arithEval a2 >>= fun y ->
+            ret (a1 = a2)
+        | ALt (a1, a2) ->
+            arithEval a1 >>= fun x ->
+            arithEval a2 >>= fun y ->
+            ret (a1 < a2)
+        | Not b ->
+            boolEval b >>= fun r ->
+            ret (not r)
+        | Conj (b1, b2) ->
+            boolEval b1 >>= fun x ->
+            boolEval b2 >>= fun y ->
+            ret (x && y)
+        | IsVowel v ->
+            charEval v >>= fun vv ->
+            ret (List.contains vv vowels)
+        | IsConsonant c ->
+            charEval c >>= fun cc ->
+            ret (List.contains cc consonants)
 
 
     type stm =                (* statements *)
