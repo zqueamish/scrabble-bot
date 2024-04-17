@@ -48,10 +48,10 @@ let main argv =
         Some (Dictionary.empty, Dictionary.insert, Dictionary.step, Some Dictionary.reverse) 
     //None
         
-    // Uncomment this line to call your client
-    let players    = [("Your name here", YourClientName.Scrabble.startGame)]
     let (dictionary, time) =
         time (fun () -> ScrabbleUtil.Dictionary.mkDict words dictAPI)
+    // Uncomment this line to call your client
+    let players    = [("Your name here", dictionary, Lars.Scrabble.startGame)]
 
     // Uncomment to test your dictionary
     // ScrabbleUtil.DebugPrint.debugPrint ("Dictionary test sucessful\n")
