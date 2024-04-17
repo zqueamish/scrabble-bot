@@ -24,8 +24,8 @@ let main argv =
     System.Console.ForegroundColor <- System.ConsoleColor.Black
     System.Console.Clear()
 
-    let board        = ScrabbleUtil.StandardBoard.standardBoard ()
-//    let board      = ScrabbleUtil.InfiniteBoard.infiniteBoard ()
+//    let board        = ScrabbleUtil.StandardBoard.standardBoard ()
+    let board      = ScrabbleUtil.InfiniteBoard.infiniteBoard ()
 
 //    let board      = ScrabbleUtil.RandomBoard.randomBoard ()
 //    let board      = ScrabbleUtil.RandomBoard.randomBoardSeed (Some 42)
@@ -35,18 +35,18 @@ let main argv =
 //    let board      = ScrabbleUtil.HoleBoard.holeBoard ()
 //    let board      = ScrabbleUtil.InfiniteHoleBoard.infiniteHoleBoard ()
 
-    let words     = readLines "./Dictionaries/English.txt"
+    let words     = readLines "../../../Dictionaries/English.txt"
 
     let handSize   = 7u
     let timeout    = None
-    let tiles      = ScrabbleUtil.English.tiles 1u
+    let tiles      = ScrabbleUtil.English.tiles 100u
     let seed       = None
     let port       = 13001
 
     let dictAPI =
         // Uncomment if you have implemented a dictionary. last element None if you have not implemented a GADDAG
         Some (Dictionary.empty, Dictionary.insert, Dictionary.step, Some Dictionary.reverse) 
- 
+    //None
         
     // Uncomment this line to call your client
     let players    = [("Your name here", YourClientName.Scrabble.startGame)]

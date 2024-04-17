@@ -1,4 +1,4 @@
-﻿module Dictionary
+﻿module internal Dictionary
 
 type Dict = {map: Map<char, Dict*bool>;}
 
@@ -14,6 +14,7 @@ let rec insertNext str dict =
     match str with
     | [] -> empty ()
     | [s] when dict.map.ContainsKey(s) -> {map = dict.map.Add (s, ((fst (dict.map.Item s)), true))}
+    | [s] -> {map = dict.map.Add (s, (empty (), true))}
     | s :: xs when dict.map.ContainsKey(s) -> {map = dict.map.Add (s,(insertNext xs (fst (dict.map.Item s)), snd (dict.map.Item s)))}
     | s :: xs -> {map = dict.map.Add(s, (insertRest xs, false))}
     

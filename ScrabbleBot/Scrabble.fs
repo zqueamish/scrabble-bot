@@ -1,4 +1,4 @@
-﻿namespace YourClientName
+﻿namespace Lars
 
 open ScrabbleUtil
 open ScrabbleUtil.ServerCommunication
@@ -66,7 +66,7 @@ module Scrabble =
             // remove the force print when you move on from manual input (or when you have learnt the format)
             forcePrint "Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n\n"
             let input =  System.Console.ReadLine()
-            let move = RegEx.parseMove input
+            let move = RegEx.parseMove input // This should be automated
 
             debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
             send cstream (SMPlay move)
@@ -113,7 +113,7 @@ module Scrabble =
                       timeout = %A\n\n" numPlayers playerNumber playerTurn hand timeout)
 
         let dict = dictf true // Uncomment if using a gaddag for your dictionary
-        // let dict = dictf false // Uncomment if using a trie for your dictionary
+        //let dict = dictf false // Uncomment if using a trie for your dictionary
         let board = Parser.mkBoard boardP
                   
         let handSet = List.fold (fun acc (x, k) -> MultiSet.add x k acc) MultiSet.empty hand

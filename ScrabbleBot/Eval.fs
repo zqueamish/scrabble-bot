@@ -5,14 +5,8 @@ module internal Eval
     open StateMonad
     open System
 
-    let add a b = 
-        a >>= (fun x ->
-            b >>= (fun y ->
-                ret (x + y)))      
-    let div a b =
-        a >>= (fun x ->
-            b >>= (fun y ->
-                ret (x / y)))      
+    let add a b = a >>= (fun v1 -> b >>= (fun v2 -> ret (v1+v2)))
+    let div a b = a >>= (fun v1 -> b >>= (fun v2 -> if v2 = 0 then (fail DivisionByZero) else ret (v1/v2)))
 
     type aExp =
         | N of int
@@ -44,7 +38,8 @@ module internal Eval
        | Conj of bExp * bExp  (* boolean conjunction *)
 
        | IsVowel of cExp      (* check for vowel *)
-       | IsConsonant of cExp  (* check for constant *)
+       | IsLetter of cExp     (* check for letter *)
+       | IsDigit of cExp      (* check for digit *)
 
     let (.+.) a b = Add (a, b)
     let (.-.) a b = Sub (a, b)
@@ -64,77 +59,46 @@ module internal Eval
     let (.>=.) a b = ~~(a .<. b)                (* numeric greater than or equal to *)
     let (.>.) a b = ~~(a .=. b) .&&. (a .>=. b) (* numeric greater than *)    
 
-    let rec arithEval a : SM<int> =
-        match a with
-        | N n -> ret n
-        | V x -> lookup x
-        | WL -> wordLength
-        | PV p -> arithEval p >>= pointValue
-        | Add (a1, a2) ->
-            arithEval a1 >>= fun x ->
-            arithEval a2 >>= fun y ->
-            ret (x + y)
-        | Sub (a1, a2) ->
-            arithEval a1 >>= fun x ->
-            arithEval a2 >>= fun y ->
-            ret (x - y)
-        | Mul (a1, a2) ->
-            arithEval a1 >>= fun x ->
-            arithEval a2 >>= fun y ->
-            ret (x * y)
-        | Div (a1, a2) ->
-            arithEval a1 >>= fun x ->
-            arithEval a2 >>= fun y ->
-            ret (x / y)
-        | Mod (a1, a2) ->
-            arithEval a1 >>= fun x ->
-            arithEval a2 >>= fun y ->
-            if y = 0 then fail DivisionByZero else ret (x / y)
-        | CharToInt c ->
-            charEval c >>= fun cv ->
-            ret (int cv)
+    let binop f (a : SM<'a>) (b : SM<'a>) = a >>= fun x -> b >>= fun y -> ret (f x y)
 
-    and charEval c : SM<char> =
+    let rec modulo a b = a >>= fun v1 -> (b >>= fun v2 -> if v2 <> 0 then
+                                                            match v1 with
+                                                            | n when n >= v2 -> modulo (ret (v1 - v2)) (ret v2)
+                                                            | n -> ret n
+                                                            else fail DivisionByZero
+                                                            )
+
+    let rec arithEval a : SM<int> = 
+        match a with
+        | N i -> ret i
+        | V s -> lookup s
+        | WL -> wordLength
+        | PV a -> arithEval a >>= pointValue 
+        | Add (a,b) -> binop (+) (arithEval a) (arithEval b)
+        | Sub (a,b) -> binop (-) (arithEval a) (arithEval b)
+        | Mul (a,b) -> binop (*) (arithEval a) (arithEval b)
+        | Div (a,b) -> div (arithEval a) (arithEval b)
+        | Mod (a,b) -> modulo (arithEval a) (arithEval b)
+        | CharToInt c -> (charEval c) >>= fun x -> ret (int x)
+    and charEval c : SM<char> = 
         match c with
         | C c -> ret c
-        | CV cv -> arithEval cv >>= characterValue
-        | ToUpper c ->
-            charEval c >>= fun c ->
-            ret (Char.ToUpper c)
-        | ToLower c ->
-            charEval c >>= fun c ->
-            ret (Char.ToLower c)
-        |IntToChar a ->
-            arithEval a >>= fun iv ->
-            ret (char iv) 
+        | CV a -> arithEval a >>= characterValue
+        | ToUpper c -> (charEval c) >>= (fun x -> ret (System.Char.ToUpper x))
+        | ToLower c -> (charEval c) >>= (fun x -> ret (System.Char.ToLower x))
+        | IntToChar a -> (arithEval a) >>= fun x -> ret (char x)
 
-    and boolEval b : SM<bool> =
-        let vowels = ['a';'A';'e';'E';'o';'O';'y';'Y']
-        let consonants = ['b';'B';'c';'C';'d';'D';'f';'F';'g';'G';'h';'H';'j';'J';'k';'K';'l';'L';'m';'M';'n';'N';'p';'P';'q';'Q';'r';'R';'s';'S';'t';'T';'v';'V';'w';'W';'y';'Y';'z';'Z']
+    let rec boolEval b : SM<bool> = 
         match b with
         | TT -> ret true
         | FF -> ret false
-        | AEq (a1, a2) ->
-            arithEval a1 >>= fun x ->
-            arithEval a2 >>= fun y ->
-            ret (a1 = a2)
-        | ALt (a1, a2) ->
-            arithEval a1 >>= fun x ->
-            arithEval a2 >>= fun y ->
-            ret (a1 < a2)
-        | Not b ->
-            boolEval b >>= fun r ->
-            ret (not r)
-        | Conj (b1, b2) ->
-            boolEval b1 >>= fun x ->
-            boolEval b2 >>= fun y ->
-            ret (x && y)
-        | IsVowel v ->
-            charEval v >>= fun vv ->
-            ret (List.contains vv vowels)
-        | IsConsonant c ->
-            charEval c >>= fun cc ->
-            ret (List.contains cc consonants)
+        | AEq (a,b) -> binop (=) (arithEval a) (arithEval b)
+        | ALt (a,b) -> binop (<) (arithEval a) (arithEval b)
+        | Not b -> boolEval b >>= fun x -> ret (not x)
+        | Conj (b1, b2) -> binop (&&) (boolEval b1) (boolEval b2)
+        | IsDigit c -> (charEval c) >>= fun x -> ret (System.Char.IsDigit x)
+        | IsLetter c -> (charEval c) >>= fun x -> ret (System.Char.IsLetter x)
+        | IsVowel c -> (charEval c) >>= fun x -> ret (((System.Char.ToLower x) |> List.contains) ['a';'e';'i';'o';'u';'y'])
 
 
     type stm =                (* statements *)
