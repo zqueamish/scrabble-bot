@@ -48,3 +48,6 @@ module internal MultiSet
         match lst with
         | [] -> empty
         | x :: xs -> addSingle x (ofList xs)
+
+    let toList (ms : MultiSet<'a>) : 'a list =
+        foldBack (fun item count acc -> List.replicate (int count) item @ acc) ms []

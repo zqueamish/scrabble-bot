@@ -57,9 +57,32 @@ module State =
 
 
 module LarsBot =
-    let move pieces (state : State.state) : (coord*(uint32*(char*int)))list = failwith "not implemented"
+    
 
-    let next_letter pieces (state : State.state) word queue = 
+
+    let rec check_other_words (pieces : Map<uint32, (char*uint32)>) (state : State.state) (pos : coord) dx dy (word : string) = 
+        match (state.board.ContainsKey pos) with
+        | false -> word
+        | true -> match dx+dy with
+                    |  1 -> check_other_words pieces state (fst pos + dx, snd pos + dy) dx dy word+(string (fst (pieces.Item (state.board.Item pos))))
+                    | -1 -> check_other_words pieces state (fst pos + dx, snd pos + dy) dx dy (string (fst (pieces.Item (state.board.Item pos))))+word
+
+    let is_valid_word (pieces : Map<uint32, (char*uint32)>) (state : State.state) (pos : coord) (direction : string) =
+        let word = match direction with
+                    | "horizontal" -> check_other_words pieces state pos -1 0 "" |> (check_other_words pieces state (fst pos + 1, snd pos) +1 0)
+                    | "vertical"   -> check_other_words pieces state pos 0 -1 "" |> (check_other_words pieces state (fst pos, snd pos + 1) 0 +1)
+        Dictionary.lookup word state.dict
+
+    let next_letter pieces (state : State.state) word pos direction = failwith ""
+
+    let find_move pieces state anchor pos valid_words = 
+
+    let move pieces (state : State.state) : (coord*(uint32*(char*int)))list = 
+        let valid_words = []
+        let valid_words = valid_words :: match state.board.IsEmpty with
+                                            | true  -> find_word pieces state string (0, 0)
+                                            | false -> 
+
 
 module Scrabble =
     open System.Threading

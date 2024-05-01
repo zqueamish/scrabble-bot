@@ -18,3 +18,4 @@ module internal MultiSet
     val foldBack : ('a -> uint32 -> 'b -> 'b) -> MultiSet<'a> -> 'b -> 'b 
 
     val ofList : 'a list -> MultiSet<'a>
+    val toList : MultiSet<'a> -> 'a list
