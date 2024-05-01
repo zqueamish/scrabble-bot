@@ -59,6 +59,8 @@ module State =
 module LarsBot =
     let move pieces (state : State.state) : (coord*(uint32*(char*int)))list = failwith "not implemented"
 
+    let next_letter pieces (state : State.state) word queue = 
+
 module Scrabble =
     open System.Threading
     open MultiSet
@@ -89,18 +91,17 @@ module Scrabble =
             // remove the force print when you move on from manual input (or when you have learnt the format)
             forcePrint "Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n\n"
             let input =  System.Console.ReadLine()
-            let move = LarsBot.move pieces st// RegEx.parseMove input // This should be automated
+            let move = RegEx.parseMove input//LarsBot.move pieces st// RegEx.parseMove input // This should be automated
 
             debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
             send cstream (SMPlay move)
 
             let msg = recv cstream
             debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
-
             match msg with
             | RCM (CMPlaySuccess(ms, points, newPieces)) ->
                 (* Successful play by you. Update your state (remove old tiles, add the new ones, change turn, etc) *)
-                let st' = (State.mkState (updateBoard ms st.board)  st.dict st.playerNumber st.hand)//(updateHand st.hand ms newPieces)) // This state needs to be updated
+                let st' = (State.mkState (updateBoard ms st.board)  st.dict st.playerNumber (updateHand st.hand ms newPieces))//(updateHand st.hand ms newPieces)) // This state needs to be updated
                 aux st'
             | RCM (CMPlayed (pid, ms, points)) ->
                 (* Successful play by other player. Update your state *)
@@ -113,8 +114,6 @@ module Scrabble =
             | RCM (CMGameOver _) -> ()
             | RCM a -> failwith (sprintf "not implmented: %A" a)
             | RGPE err -> printfn "Gameplay Error:\n%A" err; aux st
-
-
         aux st
 
     let startGame 
