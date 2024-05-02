@@ -75,14 +75,62 @@ module LarsBot =
 
     let next_letter pieces (state : State.state) word pos direction = failwith ""
 
-    let find_move pieces state anchor pos valid_words = 
+    let find_move pieces state anchor pos valid_words = failwith ""
 
-    let move pieces (state : State.state) : (coord*(uint32*(char*int)))list = 
-        let valid_words = []
-        let valid_words = valid_words :: match state.board.IsEmpty with
-                                            | true  -> find_word pieces state string (0, 0)
-                                            | false -> 
+    // let move pieces (state : State.state) : (coord*(uint32*(char*int)))list = 
+    //     let valid_words = []
+    //     let valid_words = valid_words :: match state.board.IsEmpty with
+    //                                         | true  -> find_word pieces state string (0, 0)
+    //                                         | false -> 
+    let move pieces (state : State.state) : (coord*(uint32*(char*int)))list = failwith ""
 
+    let rec gen (state : State.state) (anchor : coord) (pos : int32)(rack : MultiSet.MultiSet<uint32>) (arc : Dictionary.Dict) (pieces : Map<uint32, (char*uint32)>) (word : string) = 
+        // let cur_coords = match direction with
+        //                     | "horizontal" -> (fst anchor + pos, snd anchor)
+        //                     | "vertical" -> (fst anchor, snd anchor + pos)
+        
+        let rackList = MultiSet.toList rack
+        let plays = []
+        match rackList with
+        | [] -> []
+        | x::xs -> go_on pos pieces x xs word (Dictionary.step (fst (pieces.Item x)) arc) anchor state
+
+    and go_on (pos : int32) (pieces : Map<uint32, (char*uint32)>) (l : uint32) (rack : uint32 list) (word : string) (new_arc : (bool*Dictionary.Dict) option) (anchor : coord) (state : State.state)= 
+        let plays = []
+        if pos <= 0 then
+            let new_word = (fst (pieces.Item l)).ToString() + word
+            let plays = 
+                if Dictionary.lookup new_word state.dict then 
+                    new_word :: plays
+                else
+                    plays
+            match new_arc with
+            | Some arc -> 
+                let plays = gen state anchor (pos-1) (MultiSet.ofList rack) (snd arc) pieces new_word @ plays
+                match Dictionary.step (char 0) (snd arc) with
+                | Some arc -> 
+                    gen state anchor 1 (MultiSet.ofList rack) (snd arc) pieces new_word @ plays
+                | None -> plays
+            | None -> plays
+
+        else
+            let new_word = word + (fst (pieces.Item l)).ToString()
+            let plays = 
+                if Dictionary.lookup new_word state.dict then 
+                    new_word :: plays
+                else
+                    plays
+            match new_arc with
+            | Some arc -> gen state anchor (pos+1) (MultiSet.ofList rack) (snd arc) pieces new_word @ plays
+            | None -> plays
+
+    let genStart (state : State.state) (pieces : Map<uint32, (char*uint32)>) (anchor : coord)= 
+        let pos = 0
+        let rack = state.hand
+        let initArc = state.dict
+        let word = ""
+
+        gen state anchor pos rack initArc pieces word
 
 module Scrabble =
     open System.Threading
@@ -106,6 +154,14 @@ module Scrabble =
     let updateHand hand (ms : (coord*(uint32*(char*int)))list) (newPieces : (uint32*uint32) list) = 
         removePieces hand ms |> addPieces newPieces
 
+    let rec printWords (moves : string list) = 
+        match moves with
+        | [] -> forcePrint "No moves!"
+        | [x] -> forcePrint x
+        | x::xs -> 
+            forcePrint x
+            printWords xs
+
     let playGame cstream pieces (st : State.state) =
 
         let rec aux (st : State.state) =
@@ -114,6 +170,7 @@ module Scrabble =
             // remove the force print when you move on from manual input (or when you have learnt the format)
             forcePrint "Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n\n"
             let input =  System.Console.ReadLine()
+            printWords (LarsBot.genStart st pieces (0, 0))
             let move = RegEx.parseMove input//LarsBot.move pieces st// RegEx.parseMove input // This should be automated
 
             debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
