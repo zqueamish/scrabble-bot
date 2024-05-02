@@ -35,7 +35,8 @@ let main argv =
 //    let board      = ScrabbleUtil.HoleBoard.holeBoard ()
 //    let board      = ScrabbleUtil.InfiniteHoleBoard.infiniteHoleBoard ()
 
-    let words     = readLines "../../../Dictionaries/English.txt"
+    // ../../../Dictionaries/English.txt
+    let words     = readLines "./Dictionaries/English.txt"
 
     let handSize   = 7u
     let timeout    = None
@@ -64,10 +65,9 @@ let main argv =
 
     //let players = spawnMultiples "OxyphenButazone" dictionary Oxyphenbutazone.Scrabble.startGame 2
 
-
     do ScrabbleServer.Comm.startGame 
           board dictionary handSize timeout tiles seed port players
-    
+
     ScrabbleUtil.DebugPrint.forcePrint ("Server has terminated. Press Enter to exit program.\n")
     System.Console.ReadLine () |> ignore
 

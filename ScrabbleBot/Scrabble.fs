@@ -84,21 +84,22 @@ module LarsBot =
     //                                         | false -> 
     let move pieces (state : State.state) : (coord*(uint32*(char*int)))list = failwith ""
 
-    let rec gen (state : State.state) (anchor : coord) (pos : int32)(rack : MultiSet.MultiSet<uint32>) (arc : Dictionary.Dict) (pieces : Map<uint32, (char*uint32)>) (word : string) = 
+    let rec gen (state : State.state) (anchor : coord) (pos : int32)(rack : MultiSet.MultiSet<uint32>) (arc : Dictionary.Dict) (pieces : Map<uint32, tile>) (word : string) = 
         // let cur_coords = match direction with
         //                     | "horizontal" -> (fst anchor + pos, snd anchor)
         //                     | "vertical" -> (fst anchor, snd anchor + pos)
         
-        let rackList = MultiSet.toList rack
         let plays = []
-        match rackList with
-        | [] -> []
-        | x::xs -> go_on pos pieces x xs word (Dictionary.step (fst (pieces.Item x)) arc) anchor state
+        MultiSet.fold (fun plays letter _ -> go_on pos pieces letter (MultiSet.toList (MultiSet.remove letter 1u rack)) word (Dictionary.step (fst (Set.toList (pieces.Item letter)).[0]) arc) anchor state @ plays) plays rack
+        // match rackList with
+        // | [] -> []
+        // | x::xs -> go_on pos pieces x xs word (Dictionary.step (fst (Set.toList (pieces.Item x)).[0]) arc) anchor state
 
-    and go_on (pos : int32) (pieces : Map<uint32, (char*uint32)>) (l : uint32) (rack : uint32 list) (word : string) (new_arc : (bool*Dictionary.Dict) option) (anchor : coord) (state : State.state)= 
+    and go_on (pos : int32) (pieces : Map<uint32, Set<char * int>>) (l : uint32) (rack : uint32 list) (word : string) (new_arc : (bool*Dictionary.Dict) option) (anchor : coord) (state : State.state)= 
         let plays = []
+        let letter = fst (Set.toList (pieces.Item l)).[0]
         if pos <= 0 then
-            let new_word = (fst (pieces.Item l)).ToString() + word
+            let new_word = letter.ToString() + word
             let plays = 
                 if Dictionary.lookup new_word state.dict then 
                     new_word :: plays
@@ -114,7 +115,7 @@ module LarsBot =
             | None -> plays
 
         else
-            let new_word = word + (fst (pieces.Item l)).ToString()
+            let new_word = word + letter.ToString()
             let plays = 
                 if Dictionary.lookup new_word state.dict then 
                     new_word :: plays
@@ -124,7 +125,7 @@ module LarsBot =
             | Some arc -> gen state anchor (pos+1) (MultiSet.ofList rack) (snd arc) pieces new_word @ plays
             | None -> plays
 
-    let genStart (state : State.state) (pieces : Map<uint32, (char*uint32)>) (anchor : coord)= 
+    let genStart (state : State.state) (pieces : Map<uint32, tile>) (anchor : coord)= 
         let pos = 0
         let rack = state.hand
         let initArc = state.dict
@@ -157,9 +158,9 @@ module Scrabble =
     let rec printWords (moves : string list) = 
         match moves with
         | [] -> forcePrint "No moves!"
-        | [x] -> forcePrint x
+        | [x] -> forcePrint (x + "\n")
         | x::xs -> 
-            forcePrint x
+            forcePrint (x + "\n")
             printWords xs
 
     let playGame cstream pieces (st : State.state) =
@@ -194,6 +195,9 @@ module Scrabble =
             | RCM (CMGameOver _) -> ()
             | RCM a -> failwith (sprintf "not implmented: %A" a)
             | RGPE err -> printfn "Gameplay Error:\n%A" err; aux st
+        
+        printWords (LarsBot.genStart st pieces (0, 0))
+
         aux st
 
     let startGame 
@@ -219,7 +223,6 @@ module Scrabble =
         let board = Parser.mkBoard boardP
                   
         let handSet = List.fold (fun acc (x, k) -> MultiSet.add x k acc) MultiSet.empty hand
-
         fun () -> playGame cstream tiles (State.mkState Map.empty dict playerNumber handSet)
 
 
