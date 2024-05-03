@@ -52,8 +52,8 @@ let main argv =
     let (dictionary, time) =
         time (fun () -> ScrabbleUtil.Dictionary.mkDict words dictAPI)
     // Uncomment this line to call your client
-    //let players    = [("Lars", dictionary, Lars.Scrabble.startGame)]
-    let players = spawnMultiples "Lars" dictionary Lars.Scrabble.startGame 4
+    let players    = [("Lars", dictionary, Lars.Scrabble.startGame)]
+    //let players = spawnMultiples "Lars" dictionary Lars.Scrabble.startGame 4
 
     // Uncomment to test your dictionary
     // ScrabbleUtil.DebugPrint.debugPrint ("Dictionary test sucessful\n")

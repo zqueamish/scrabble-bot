@@ -30,9 +30,7 @@ module RegEx =
         Seq.toList
 
  module Print =
-    open System.Threading
     let printHand pieces hand =
-        Thread.Sleep 100
         hand |>
         MultiSet.fold (fun _ x i -> forcePrint (sprintf "%d -> (%A, %d)\n" x (Map.find x pieces) i)) ()
 
@@ -48,10 +46,11 @@ module State =
         playerNumber  : uint32
         hand          : MultiSet.MultiSet<uint32>
         playerTurn    : uint32
+        players       : Map<uint32, bool>
         noPlayers     : uint32
     }
-
-    let mkState b d pn h pt np = {board = b; dict = d;  playerNumber = pn; hand = h; playerTurn = pt; noPlayers = np }
+    
+    let mkState b d pn h pt players np = {board = b; dict = d;  playerNumber = pn; hand = h; playerTurn = pt; players = players; noPlayers = np }
 
     let board st         = st.board
     let dict st          = st.dict
@@ -61,7 +60,7 @@ module State =
 
 module LarsBot =
     
-
+    open System.Threading.Tasks
 
     let rec check_other_words (pieces : Map<uint32, tile>) (state : State.state) (pos : coord) dx dy (word : string) = 
         match (state.board.ContainsKey pos) with
@@ -144,8 +143,10 @@ module LarsBot =
         let word_moves = []
         let direction = true // True is horizontal and False is vertical
 
-        let words =  if (not (state.board.ContainsKey (coord(fst anchor + 1, snd anchor)))) then gen direction state anchor pos rack initArc pieces word word_moves else []
-        if (not (state.board.ContainsKey (coord(fst anchor, snd anchor + 1)))) then words @ (gen (not direction) state anchor pos rack initArc pieces word word_moves) else words
+        let horizontal_words =  async { return if (not (state.board.ContainsKey (coord(fst anchor + 1, snd anchor)))) then gen direction state anchor pos rack initArc pieces word word_moves else []}
+        let vertical_words = async {return if (not (state.board.ContainsKey (coord(fst anchor, snd anchor + 1)))) then (gen (not direction) state anchor pos rack initArc pieces word word_moves) else []}
+
+        (Async.RunSynchronously horizontal_words) @ (Async.RunSynchronously vertical_words)
 
     let rec move_value (move : (coord*(uint32*(char*int)))list) = 
         match move with
@@ -153,13 +154,16 @@ module LarsBot =
         | x :: xs -> x |> snd |> snd |> snd |> (+) (move_value xs)
 
     let move pieces (state : State.state) : (coord*(uint32*(char*int)))list = 
-        let playable_moves = if state.board.ContainsKey (coord(0, 0)) then Map.fold (fun words anchor letter -> genStart state pieces anchor @ words) [] state.board
+        let playable_moves = if state.board.ContainsKey (coord(0, 0)) then 
+                                let tasks = (Map.fold (fun lst anchor letter  -> async {return genStart state pieces anchor} :: lst) [] state.board)
+                                Array.fold (fun moves move -> move @ moves) [] (tasks |> Async.Parallel |> Async.RunSynchronously)
                              else genStart state pieces (0, 0)
         List.fold (fun (best_move : (coord*(uint32*(char*int32))) list) (move : 'b list) -> if move_value move > move_value best_move then move else best_move) [] playable_moves
 
 module Scrabble =
     open System.Threading
     open MultiSet
+
 
     let rec updateBoard (ms : (coord*(uint32*(char*int)))list) (board : Map<coord, uint32>) = 
         match ms with
@@ -195,33 +199,45 @@ module Scrabble =
             // remove the force print when you move on from manual input (or when you have learnt the format)
             // forcePrint "Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n\n"
             // let input =  System.Console.ReadLine()
-            if st.playerTurn = st.playerNumber then
-                let move = LarsBot.move pieces st// RegEx.parseMove input // This should be automated
+            if (not (st.players.Item st.playerTurn)) then aux (State.mkState st.board st.dict st.playerNumber st.hand (((st.playerTurn)%st.noPlayers)+1u) st.players st.noPlayers)
+            else 
+                if st.playerTurn = st.playerNumber then
+                    let move = LarsBot.move pieces st// RegEx.parseMove input // This should be automated
 
-                debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
-                send cstream (if (List.length move) > 0 then (SMPlay move) else SMPass)
-                debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
-            let msg = recv cstream
+                    debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
+                    send cstream (if (List.length move) > 0 then (SMPlay move) else SMPass)
+                    debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
+                let msg = recv cstream
             
-            match msg with
-            | RCM (CMPlaySuccess(ms, points, newPieces)) ->
-                (* Successful play by you. Update your state (remove old tiles, add the new ones, change turn, etc) *)
-                let st' = (State.mkState (updateBoard ms st.board)  st.dict st.playerNumber (updateHand st.hand ms newPieces) (((st.playerNumber)%st.noPlayers)+1u) st.noPlayers)//(updateHand st.hand ms newPieces)) // This state needs to be updated
-                aux st'
-            | RCM (CMPlayed (pid, ms, points)) ->
-                (* Successful play by other player. Update your state *)
-                let st' = (State.mkState (updateBoard ms st.board)  st.dict st.playerNumber st.hand (((pid)%st.noPlayers)+1u) st.noPlayers) // This state needs to be updated
-                aux st'
-            | RCM (CMPlayFailed (pid, ms)) ->
-                (* Failed play. Update your state *)
-                let st' = (State.mkState (updateBoard ms st.board)  st.dict st.playerNumber st.hand (((pid)%st.noPlayers)+1u) st.noPlayers) // This state needs to be updated
-                aux st'
-            | RCM (CMPassed (pid)) ->
-                let st' = (State.mkState st.board st.dict st.playerNumber st.hand (((pid)%st.noPlayers)+1u) st.noPlayers)
-                aux st'
-            | RCM (CMGameOver _) -> ()
-            | RCM a -> failwith (sprintf "not implmented: %A" a)
-            | RGPE err -> printfn "Gameplay Error:\n%A" err; aux st
+                match msg with
+                | RCM (CMPlaySuccess(ms, points, newPieces)) ->
+                    (* Successful play by you. Update your state (remove old tiles, add the new ones, change turn, etc) *)
+                    let st' = (State.mkState (updateBoard ms st.board)  st.dict st.playerNumber (updateHand st.hand ms newPieces) (((st.playerNumber)%st.noPlayers)+1u) st.players st.noPlayers)//(updateHand st.hand ms newPieces)) // This state needs to be updated
+                    aux st'
+                | RCM (CMPlayed (pid, ms, points)) ->
+                    (* Successful play by other player. Update your state *)
+                    let st' = (State.mkState (updateBoard ms st.board)  st.dict st.playerNumber st.hand (((pid)%st.noPlayers)+1u) st.players st.noPlayers) // This state needs to be updated
+                    aux st'
+                | RCM (CMPlayFailed (pid, ms)) ->
+                    (* Failed play. Update your state *)
+                    let st' = (State.mkState (updateBoard ms st.board)  st.dict st.playerNumber st.hand (((pid)%st.noPlayers)+1u) st.players st.noPlayers) // This state needs to be updated
+                    aux st'
+                | RCM (CMPassed (pid)) ->
+                    let st' = (State.mkState st.board st.dict st.playerNumber st.hand (((pid)%st.noPlayers)+1u) st.players st.noPlayers)
+                    aux st'
+                | RCM (CMForfeit (pid)) ->
+                    let st' = (State.mkState st.board st.dict st.playerNumber st.hand st.noPlayers (st.players.Add (pid, false)) st.noPlayers)
+                    aux st'
+                | RCM (CMChange (pid, nt)) ->
+                    let st' = (State.mkState st.board st.dict st.playerNumber st.hand (((pid)%st.noPlayers)+1u) st.players st.noPlayers)
+                    aux st'
+                | RCM (CMTimeout (pid)) -> 
+                    let st' = (State.mkState st.board st.dict st.playerNumber st.hand (((pid)%st.noPlayers)+1u) st.players st.noPlayers)
+                    aux st'
+                | RCM (CMGameOver _) -> ()
+                | RCM a -> failwith (sprintf "not implmented: %A" a)
+                | RGPE err -> printfn "Gameplay Error:\n%A" err; aux st
+
         
         //printWords (LarsBot.genStart st pieces (0, 0))
 
@@ -248,8 +264,13 @@ module Scrabble =
         let dict = dictf true // Uncomment if using a gaddag for your dictionary
         //let dict = dictf false // Uncomment if using a trie for your dictionary
         let board = Parser.mkBoard boardP
-                  
+        
+        let rec mkPlayers (n : uint32) =
+            match n with
+            | 0u -> Map.empty
+            | n -> (mkPlayers (n-1u)).Add (n, true)
+
         let handSet = List.fold (fun acc (x, k) -> MultiSet.add x k acc) MultiSet.empty hand
-        fun () -> playGame cstream tiles (State.mkState Map.empty dict playerNumber handSet playerTurn numPlayers)
+        fun () -> playGame cstream tiles (State.mkState Map.empty dict playerNumber handSet playerTurn (mkPlayers numPlayers) numPlayers)
 
 
