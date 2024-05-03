@@ -18,7 +18,7 @@ let spawnMultiples name dict bot =
 
 [<EntryPoint>]
 let main argv =
-    ScrabbleUtil.DebugPrint.toggleDebugPrint true // Change to false to supress debug output
+    ScrabbleUtil.DebugPrint.toggleDebugPrint false // Change to false to supress debug output
 
     System.Console.BackgroundColor <- System.ConsoleColor.White
     System.Console.ForegroundColor <- System.ConsoleColor.Black
@@ -41,7 +41,7 @@ let main argv =
     let handSize   = 7u
     let timeout    = None
     let tiles      = ScrabbleUtil.English.tiles 1u
-    let seed       = Some 0
+    let seed       = None //Some 0
     let port       = 13001
 
     let dictAPI =
@@ -52,12 +52,13 @@ let main argv =
     let (dictionary, time) =
         time (fun () -> ScrabbleUtil.Dictionary.mkDict words dictAPI)
     // Uncomment this line to call your client
-    let players    = [("Lars", dictionary, Lars.Scrabble.startGame)]
+    //let players    = [("Lars", dictionary, Lars.Scrabble.startGame)]
+    let players = spawnMultiples "Lars" dictionary Lars.Scrabble.startGame 4
 
     // Uncomment to test your dictionary
     // ScrabbleUtil.DebugPrint.debugPrint ("Dictionary test sucessful\n")
     // let incorrectWords = ScrabbleUtil.Dictionary.test words 10 (dictionary true) // change the boolean to true if using a GADDAG
-    // match incorrectWords with
+    // match incorrectWords withS
     // | [] -> ScrabbleUtil.DebugPrint.debugPrint ("Dictionary test sucessful!\n")
     // | _ -> ScrabbleUtil.DebugPrint.debugPrint ("Dictionary test failed for at least the following words: \n")
     // List.iter (fun str -> ScrabbleUtil.DebugPrint.debugPrint (sprintf "%s\n" str)) incorrectWords

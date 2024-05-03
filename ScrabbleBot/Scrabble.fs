@@ -30,8 +30,9 @@ module RegEx =
         Seq.toList
 
  module Print =
-
+    open System.Threading
     let printHand pieces hand =
+        Thread.Sleep 100
         hand |>
         MultiSet.fold (fun _ x i -> forcePrint (sprintf "%d -> (%A, %d)\n" x (Map.find x pieces) i)) ()
 
@@ -46,9 +47,11 @@ module State =
         dict          : ScrabbleUtil.Dictionary.Dict
         playerNumber  : uint32
         hand          : MultiSet.MultiSet<uint32>
+        playerTurn    : uint32
+        noPlayers     : uint32
     }
 
-    let mkState b d pn h = {board = b; dict = d;  playerNumber = pn; hand = h }
+    let mkState b d pn h pt np = {board = b; dict = d;  playerNumber = pn; hand = h; playerTurn = pt; noPlayers = np }
 
     let board st         = st.board
     let dict st          = st.dict
@@ -74,21 +77,7 @@ module LarsBot =
         if String.length word = 1 then true 
         else Dictionary.lookup word state.dict
 
-    let next_letter pieces (state : State.state) word pos direction = failwith ""
-
-    let find_move pieces state anchor pos valid_words = failwith ""
-
-    // let move pieces (state : State.state) : (coord*(uint32*(char*int)))list = 
-    //     let valid_words = []
-    //     let valid_words = valid_words :: match state.board.IsEmpty with
-    //                                         | true  -> find_word pieces state string (0, 0)
-    //                                         | false -> 
-
-    let rec gen (direction : bool) (state : State.state) (anchor : coord) (pos : int32)(rack : MultiSet.MultiSet<uint32>) (arc : Dictionary.Dict) (pieces : Map<uint32, tile>) (word : string) (word_moves : (coord*(uint32*(char*int)))list)= 
-        // let cur_coords = match direction with
-        //                     | "horizontal" -> (fst anchor + pos, snd anchor)
-        //                     | "vertical" -> (fst anchor, snd anchor + pos)
-        
+    let rec gen (direction : bool) (state : State.state) (anchor : coord) (pos : int32)(rack : MultiSet.MultiSet<uint32>) (arc : Dictionary.Dict) (pieces : Map<uint32, tile>) (word : string) (word_moves : (coord*(uint32*(char*int)))list) =    
         let plays = []
         let pos_coords = 
             match direction with
@@ -98,9 +87,6 @@ module LarsBot =
             go_on direction pos pieces (state.board.Item pos_coords) (MultiSet.toList rack) word word_moves (Dictionary.step (fst (Set.toList (pieces.Item (state.board.Item pos_coords))).[0]) arc) anchor state
         else 
             MultiSet.fold (fun plays letter _ -> go_on direction pos pieces letter (MultiSet.toList (MultiSet.remove letter 1u rack)) word word_moves (Dictionary.step (fst (Set.toList (pieces.Item letter)).[0]) arc) anchor state @ plays) plays rack
-        // match rackList with
-        // | [] -> []
-        // | x::xs -> go_on pos pieces x xs word (Dictionary.step (fst (Set.toList (pieces.Item x)).[0]) arc) anchor state
 
     and go_on (direction : bool) (pos : int32) (pieces : Map<uint32, Set<char * int>>) (l : uint32) (rack : uint32 list) (word : string) (word_moves : (coord*(uint32*(char*int)))list) (new_arc : (bool*Dictionary.Dict) option) (anchor : coord) (state : State.state)= 
         let plays = []
@@ -110,8 +96,7 @@ module LarsBot =
             | true  -> coord(fst anchor + pos, snd anchor)
             | false -> coord(fst anchor, snd anchor + pos)
         if not (is_valid_word pieces state pos_coords (not direction) letter (MultiSet.ofList rack)) then plays 
-        else 
-        if pos <= 0 then
+        else if pos <= 0 then
             let next_pos_coords = 
                 match direction with
                 | true  -> coord(fst anchor + pos - 1, snd anchor)
@@ -120,7 +105,7 @@ module LarsBot =
             let word_moves = if state.board.ContainsKey pos_coords then word_moves else (pos_coords, (l, ((fst (Set.toList (pieces.Item l)).[0]), (snd (Set.toList (pieces.Item l)).[0])))) :: word_moves
             let plays = 
                 if Dictionary.lookup new_word state.dict && (not (state.board.ContainsKey next_pos_coords)) then 
-                    if MultiSet.size state.hand = MultiSet.size (MultiSet.ofList rack) then plays else word_moves :: plays
+                    if List.length word_moves > 0 then word_moves :: plays else plays
                 else
                     plays
 
@@ -144,7 +129,7 @@ module LarsBot =
             let word_moves = if state.board.ContainsKey pos_coords then word_moves else (pos_coords, (l, ((fst (Set.toList (pieces.Item l)).[0]), (snd (Set.toList (pieces.Item l)).[0])))) :: word_moves
             let plays = 
                 if Dictionary.lookup new_word state.dict && (not (state.board.ContainsKey next_pos_coords)) then 
-                    if MultiSet.size state.hand = MultiSet.size (MultiSet.ofList rack) then plays else word_moves :: plays
+                    if List.length word_moves > 0 then word_moves :: plays else plays
                 else
                     plays
             match new_arc with
@@ -162,10 +147,15 @@ module LarsBot =
         let words =  if (not (state.board.ContainsKey (coord(fst anchor + 1, snd anchor)))) then gen direction state anchor pos rack initArc pieces word word_moves else []
         if (not (state.board.ContainsKey (coord(fst anchor, snd anchor + 1)))) then words @ (gen (not direction) state anchor pos rack initArc pieces word word_moves) else words
 
+    let rec move_value (move : (coord*(uint32*(char*int)))list) = 
+        match move with
+        | []      -> 0 
+        | x :: xs -> x |> snd |> snd |> snd |> (+) (move_value xs)
+
     let move pieces (state : State.state) : (coord*(uint32*(char*int)))list = 
         let playable_moves = if state.board.ContainsKey (coord(0, 0)) then Map.fold (fun words anchor letter -> genStart state pieces anchor @ words) [] state.board
                              else genStart state pieces (0, 0)
-        List.fold (fun (best_move : (coord*(uint32*(char*int32))) list) (move : 'b list) -> if List.length move > List.length best_move then move else best_move) [] playable_moves
+        List.fold (fun (best_move : (coord*(uint32*(char*int32))) list) (move : 'b list) -> if move_value move > move_value best_move then move else best_move) [] playable_moves
 
 module Scrabble =
     open System.Threading
@@ -205,26 +195,29 @@ module Scrabble =
             // remove the force print when you move on from manual input (or when you have learnt the format)
             // forcePrint "Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n\n"
             // let input =  System.Console.ReadLine()
-            
-            let move = LarsBot.move pieces st// RegEx.parseMove input // This should be automated
+            if st.playerTurn = st.playerNumber then
+                let move = LarsBot.move pieces st// RegEx.parseMove input // This should be automated
 
-            debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
-            send cstream (SMPlay move)
-
+                debugPrint (sprintf "Player %d -> Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
+                send cstream (if (List.length move) > 0 then (SMPlay move) else SMPass)
+                debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
             let msg = recv cstream
-            debugPrint (sprintf "Player %d <- Server:\n%A\n" (State.playerNumber st) move) // keep the debug lines. They are useful.
+            
             match msg with
             | RCM (CMPlaySuccess(ms, points, newPieces)) ->
                 (* Successful play by you. Update your state (remove old tiles, add the new ones, change turn, etc) *)
-                let st' = (State.mkState (updateBoard ms st.board)  st.dict st.playerNumber (updateHand st.hand ms newPieces))//(updateHand st.hand ms newPieces)) // This state needs to be updated
+                let st' = (State.mkState (updateBoard ms st.board)  st.dict st.playerNumber (updateHand st.hand ms newPieces) (((st.playerNumber)%st.noPlayers)+1u) st.noPlayers)//(updateHand st.hand ms newPieces)) // This state needs to be updated
                 aux st'
             | RCM (CMPlayed (pid, ms, points)) ->
                 (* Successful play by other player. Update your state *)
-                let st' = (State.mkState (updateBoard ms st.board)  st.dict st.playerNumber st.hand) // This state needs to be updated
+                let st' = (State.mkState (updateBoard ms st.board)  st.dict st.playerNumber st.hand (((pid)%st.noPlayers)+1u) st.noPlayers) // This state needs to be updated
                 aux st'
             | RCM (CMPlayFailed (pid, ms)) ->
                 (* Failed play. Update your state *)
-                let st' = (State.mkState (updateBoard ms st.board)  st.dict st.playerNumber st.hand) // This state needs to be updated
+                let st' = (State.mkState (updateBoard ms st.board)  st.dict st.playerNumber st.hand (((pid)%st.noPlayers)+1u) st.noPlayers) // This state needs to be updated
+                aux st'
+            | RCM (CMPassed (pid)) ->
+                let st' = (State.mkState st.board st.dict st.playerNumber st.hand (((pid)%st.noPlayers)+1u) st.noPlayers)
                 aux st'
             | RCM (CMGameOver _) -> ()
             | RCM a -> failwith (sprintf "not implmented: %A" a)
@@ -257,6 +250,6 @@ module Scrabble =
         let board = Parser.mkBoard boardP
                   
         let handSet = List.fold (fun acc (x, k) -> MultiSet.add x k acc) MultiSet.empty hand
-        fun () -> playGame cstream tiles (State.mkState Map.empty dict playerNumber handSet)
+        fun () -> playGame cstream tiles (State.mkState Map.empty dict playerNumber handSet playerTurn numPlayers)
 
 
