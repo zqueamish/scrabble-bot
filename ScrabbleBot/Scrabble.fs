@@ -112,10 +112,14 @@ module LarsBot =
         if not (is_valid_word pieces state pos_coords (not direction) letter (MultiSet.ofList rack)) then plays 
         else 
         if pos <= 0 then
+            let next_pos_coords = 
+                match direction with
+                | true  -> coord(fst anchor + pos - 1, snd anchor)
+                | false -> coord(fst anchor, snd anchor + pos - 1)
             let new_word = letter.ToString() + word
             let word_moves = if state.board.ContainsKey pos_coords then word_moves else (pos_coords, (l, ((fst (Set.toList (pieces.Item l)).[0]), (snd (Set.toList (pieces.Item l)).[0])))) :: word_moves
             let plays = 
-                if Dictionary.lookup new_word state.dict then 
+                if Dictionary.lookup new_word state.dict && (not (state.board.ContainsKey next_pos_coords)) then 
                     if MultiSet.size state.hand = MultiSet.size (MultiSet.ofList rack) then plays else word_moves :: plays
                 else
                     plays
@@ -125,15 +129,21 @@ module LarsBot =
                 let plays = (gen direction state anchor (pos-1) (MultiSet.ofList rack) (snd arc) pieces new_word word_moves) @ plays
                 match Dictionary.step (char 0) (snd arc) with
                 | Some arc -> 
-                    (gen direction state anchor 1 (MultiSet.ofList rack) (snd arc) pieces new_word word_moves) @ plays
+                    if  (not (state.board.ContainsKey next_pos_coords)) then 
+                        (gen direction state anchor 1 (MultiSet.ofList rack) (snd arc) pieces new_word word_moves) @ plays
+                    else plays
                 | None -> plays
             | None -> plays
 
         else
+            let next_pos_coords = 
+                match direction with
+                | true  -> coord(fst anchor + pos + 1, snd anchor)
+                | false -> coord(fst anchor, snd anchor + pos + 1)
             let new_word = word + letter.ToString()
             let word_moves = if state.board.ContainsKey pos_coords then word_moves else (pos_coords, (l, ((fst (Set.toList (pieces.Item l)).[0]), (snd (Set.toList (pieces.Item l)).[0])))) :: word_moves
             let plays = 
-                if Dictionary.lookup new_word state.dict then 
+                if Dictionary.lookup new_word state.dict && (not (state.board.ContainsKey next_pos_coords)) then 
                     if MultiSet.size state.hand = MultiSet.size (MultiSet.ofList rack) then plays else word_moves :: plays
                 else
                     plays
@@ -149,8 +159,8 @@ module LarsBot =
         let word_moves = []
         let direction = true // True is horizontal and False is vertical
 
-        let words = gen direction state anchor pos rack initArc pieces word word_moves
-        words @ (gen (not direction) state anchor pos rack initArc pieces word word_moves)
+        let words =  if (not (state.board.ContainsKey (coord(fst anchor + 1, snd anchor)))) then gen direction state anchor pos rack initArc pieces word word_moves else []
+        if (not (state.board.ContainsKey (coord(fst anchor, snd anchor + 1)))) then words @ (gen (not direction) state anchor pos rack initArc pieces word word_moves) else words
 
     let move pieces (state : State.state) : (coord*(uint32*(char*int)))list = 
         let playable_moves = if state.board.ContainsKey (coord(0, 0)) then Map.fold (fun words anchor letter -> genStart state pieces anchor @ words) [] state.board
